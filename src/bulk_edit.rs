@@ -9,7 +9,7 @@ fn edit(contents: impl Display) -> Result<String, io::Error> {
     // 一時ファイルを作成し、パスとファイルハンドルを返す
     let tempfile = {
         let mut path = temp_dir();
-        path.push("channels.txt");
+        path.push("channels.edisch");
         let mut file = File::create(&path)?;
         writeln!(file, "{contents}")?;
         path
@@ -38,8 +38,12 @@ pub trait TextEditableItem: Display {
     fn content(&self) -> String;
     /// テキストを適用する
     async fn apply(&mut self, content: String) -> Result<(), io::Error>;
-    // バリデーション
-    fn validate(&self) -> Result<(), io::Error> {
+    /// コメント
+    fn comment(&self) -> String {
+        String::new()
+    }
+    /// バリデーション
+    fn validate(&self, _new: &str) -> Result<(), io::Error> {
         Ok(())
     }
 }
@@ -72,7 +76,16 @@ pub fn bulk_edit<T: TextEditableItem>(
     let len = items.len();
     let text = items
         .clone()
-        .map(|item| item.content())
+        .map(|item| {
+            let mut line = item.content();
+            if line.contains('\t') {
+                panic!("tab character is not allowed in content");
+            }
+            if !item.comment().is_empty() {
+                line.push_str(&format!("\t{}", item.comment()));
+            }
+            line
+        })
         .collect::<Vec<_>>()
         .join("\n");
     if len != text.lines().count() {
@@ -90,15 +103,16 @@ pub fn bulk_edit<T: TextEditableItem>(
         text
     };
     let mut diffs = Vec::new();
-    for (item, new) in items.into_iter().zip(text.lines()) {
-        item.validate()?;
+    for (item, line) in items.into_iter().zip(text.lines()) {
+        let new = if let Some(pos) = line.find('\t') {
+            line[..pos].to_string()
+        } else {
+            line.to_string()
+        };
+        item.validate(&new)?;
         let old = item.content();
         if old != new {
-            diffs.push(Diff {
-                old,
-                new: new.to_string(),
-                item,
-            });
+            diffs.push(Diff { old, new, item });
         }
     }
     Ok(diffs)

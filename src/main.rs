@@ -12,23 +12,12 @@ use serenity::{
 use std::io::BufWriter;
 use std::{env, fmt::Display, io, sync::Arc};
 
-fn is_valid_channel_name(name: &str) -> bool {
-    let len = name.chars().count();
-    if !(2..=100).contains(&len) {
-        return false;
-    }
-
-    // チャンネル名に使用可能な文字の正規表現
-    let re = Regex::new(r"^[\p{L}\p{N}_-]*$").unwrap();
-
-    re.is_match(name)
-}
-
 #[derive(Clone)]
 struct ChannelItem {
     channel: GuildChannel,
     channel_id: ChannelId,
     http: Arc<Http>,
+    parent_name: Option<String>,
 }
 
 impl Display for ChannelItem {
@@ -52,16 +41,53 @@ impl TextEditableItem for ChannelItem {
     fn content(&self) -> String {
         self.channel.name.clone()
     }
-    fn validate(&self) -> Result<(), io::Error> {
-        let name = self.content();
-        if !is_valid_channel_name(&name) {
-            Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "Invalid channel name",
-            ))
-        } else {
-            Ok(())
+    fn comment(&self) -> String {
+        let emoji = match self.channel.kind {
+            ChannelType::Text => '📝',
+            ChannelType::Voice => '🔊',
+            ChannelType::Category => '📁',
+            ChannelType::News => '📰',
+            ChannelType::Forum => '📣',
+            ChannelType::Stage => '🎭',
+            _ => '❓',
+        };
+        let id = self.channel_id;
+        let parent_name = self.parent_name.clone();
+        let mut comment = format!("{emoji} ({id})");
+        if let Some(parent_name) = parent_name {
+            comment.push_str(" in ");
+            comment.push_str(&parent_name);
         }
+        comment
+    }
+    fn validate(&self, new: &str) -> Result<(), io::Error> {
+        let len = new.chars().count();
+        if !(2..=100).contains(&len) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Channel name must be between 2 and 100 characters",
+            ));
+        }
+        let err = Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Invalid channel name",
+        ));
+
+        if self.channel.kind == ChannelType::Category {
+            let re = Regex::new(r"^[\p{L}\p{N}_ -]+$").unwrap();
+
+            if !re.is_match(new) {
+                return err;
+            }
+        } else {
+            let re = Regex::new(r"^[\p{L}\p{N}_-]*$").unwrap();
+
+            if !re.is_match(new) {
+                return err;
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -116,26 +142,41 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 指定したGuildのチャンネル一覧を取得
     let channels = guild_id.channels(&http).await?;
-    let items: Vec<_> = channels
-        .into_iter()
-        .filter_map(|(channel_id, channel)| {
-            let kind = channel.kind;
-            let item = Some(ChannelItem {
-                channel,
-                channel_id,
-                http: http.clone(),
-            });
-            match kind {
-                ChannelType::Text if args.text => item,
-                ChannelType::Voice if args.voice => item,
-                ChannelType::Category if args.category => item,
-                ChannelType::News if args.news => item,
-                ChannelType::Forum if args.forum => item,
-                ChannelType::Stage if args.stage => item,
-                _ => None,
-            }
-        })
-        .collect();
+    let items = {
+        let mut items: Vec<_> = channels
+            .clone()
+            .into_iter()
+            .filter_map(|(channel_id, channel)| {
+                let kind = channel.kind;
+                let parent_name = 'p: {
+                    let Some(id) = channel.parent_id else {
+                        break 'p None;
+                    };
+                    let Some(parent) = channels.get(&id) else {
+                        break 'p None;
+                    };
+                    Some(parent.name.clone())
+                };
+                let item = Some(ChannelItem {
+                    channel,
+                    channel_id,
+                    parent_name,
+                    http: http.clone(),
+                });
+                match kind {
+                    ChannelType::Text if args.text => item,
+                    ChannelType::Voice if args.voice => item,
+                    ChannelType::Category if args.category => item,
+                    ChannelType::News if args.news => item,
+                    ChannelType::Forum if args.forum => item,
+                    ChannelType::Stage if args.stage => item,
+                    _ => None,
+                }
+            })
+            .collect();
+        items.sort_by_key(|item| item.channel.position);
+        items
+    };
     if items.is_empty() {
         println!("No channels found");
         return Ok(());
