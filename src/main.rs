@@ -121,9 +121,6 @@ struct Args {
     /// Edit all channel types
     #[clap(long)]
     all: bool,
-    /// Edit other channel types
-    #[clap(long)]
-    others: bool,
     /// Generate shell completion
     #[arg(long, value_name = "SHELL")]
     completion: Option<Shell>,
@@ -179,7 +176,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     ChannelType::News if args.news => item,
                     ChannelType::Forum if args.forum => item,
                     ChannelType::Stage if args.stage => item,
-                    _ if args.others => item,
                     _ => None,
                 }
             })
