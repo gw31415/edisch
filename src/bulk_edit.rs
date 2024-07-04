@@ -34,10 +34,14 @@ fn edit(contents: impl Display) -> Result<String, io::Error> {
 
 /// 一括変更することができるアイテム
 pub trait TextEditableItem: Display {
-    // テキスト部分の抽出
+    /// テキスト部分の抽出
     fn content(&self) -> String;
     /// テキストを適用する
     async fn apply(&mut self, content: String) -> Result<(), io::Error>;
+    // バリデーション
+    fn validate(&self) -> Result<(), io::Error> {
+        Ok(())
+    }
 }
 
 /// 変更を表す
@@ -85,21 +89,17 @@ pub fn bulk_edit<T: TextEditableItem>(
         }
         text
     };
-    let diffs = items
-        .into_iter()
-        .zip(text.lines())
-        .filter_map(|(item, new)| {
-            let old = item.content();
-            if old != new {
-                Some(Diff {
-                    old,
-                    new: new.to_string(),
-                    item,
-                })
-            } else {
-                None
-            }
-        })
-        .collect();
+    let mut diffs = Vec::new();
+    for (item, new) in items.into_iter().zip(text.lines()) {
+        item.validate()?;
+        let old = item.content();
+        if old != new {
+            diffs.push(Diff {
+                old,
+                new: new.to_string(),
+                item,
+            });
+        }
+    }
     Ok(diffs)
 }
