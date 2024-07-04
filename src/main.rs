@@ -65,6 +65,7 @@ impl TextEditableItem for ChannelItem {
     }
 }
 
+/// Tool to change Discord channel names in bulk
 #[derive(Parser, Debug)]
 struct Args {
     /// Bot token
@@ -73,22 +74,22 @@ struct Args {
     /// Guild ID
     #[clap(short, long)]
     guild_id: Option<u64>,
-    /// テキストチャンネル
+    /// Edit Text Channels
     #[clap(long)]
     text: bool,
-    /// ボイスチャンネル
+    /// Edit Voice Channels
     #[clap(long)]
     voice: bool,
-    /// フォーラムチャンネル
+    /// Edit Forum Channels
     #[clap(long)]
     forum: bool,
-    /// Stageチャンネル
+    /// Edit Stage Channels
     #[clap(long)]
     stage: bool,
-    /// Newsチャンネル
+    /// Edit News Channels
     #[clap(long)]
     news: bool,
-    /// カテゴリチャンネル
+    /// Edit Category Channels
     #[clap(long)]
     category: bool,
     /// Generate shell completion
