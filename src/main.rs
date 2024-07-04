@@ -4,12 +4,11 @@ use bulk_edit::{bulk_edit, TextEditableItem};
 use clap::{CommandFactory, Parser};
 use clap_complete::Shell;
 use dialoguer::Confirm;
-use regex::Regex;
 use serenity::{
     all::{ChannelId, ChannelType, EditChannel, GuildChannel, Http},
     model::id::GuildId,
 };
-use std::io::BufWriter;
+use std::{cmp::Ordering, io::BufWriter};
 use std::{env, fmt::Display, io, sync::Arc};
 
 #[derive(Clone)]
@@ -18,6 +17,39 @@ struct ChannelItem {
     channel_id: ChannelId,
     http: Arc<Http>,
     parent_name: Option<String>,
+    parent_position: u16,
+}
+
+impl PartialEq for ChannelItem {
+    fn eq(&self, other: &Self) -> bool {
+        self.channel_id == other.channel_id
+    }
+}
+
+impl Eq for ChannelItem {}
+
+impl PartialOrd for ChannelItem {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for ChannelItem {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match self.parent_position.cmp(&other.parent_position) {
+            Ordering::Equal => {}
+            other => return other,
+        }
+        if self.parent_name.is_some() && other.parent_name.is_none() {
+            return Ordering::Greater;
+        } else if self.parent_name.is_none() && other.parent_name.is_some() {
+            return Ordering::Less;
+        }
+        match self.channel.parent_id.cmp(&other.channel.parent_id) {
+            Ordering::Equal => self.channel.position.cmp(&other.channel.position),
+            other => other,
+        }
+    }
 }
 
 impl Display for ChannelItem {
@@ -42,7 +74,7 @@ impl TextEditableItem for ChannelItem {
         self.channel.name.clone()
     }
     fn comment(&self) -> String {
-        let emoji = match self.channel.kind {
+        let mut comment = match self.channel.kind {
             ChannelType::Text => '📝',
             ChannelType::Voice => '🔊',
             ChannelType::Category => '📁',
@@ -50,14 +82,15 @@ impl TextEditableItem for ChannelItem {
             ChannelType::Forum => '📣',
             ChannelType::Stage => '🎭',
             _ => '❓',
-        };
-        let id = self.channel_id;
+        }.to_string();
         let parent_name = self.parent_name.clone();
-        let mut comment = format!("{emoji} ({id})");
         if let Some(parent_name) = parent_name {
             comment.push_str(" in ");
             comment.push_str(&parent_name);
         }
+        comment.push_str(" (");
+        comment.push_str(&self.channel_id.to_string());
+        comment.push(')');
         comment
     }
     fn validate(&self, new: &str) -> Result<(), io::Error> {
@@ -68,24 +101,25 @@ impl TextEditableItem for ChannelItem {
                 "Channel name must be between 2 and 100 characters",
             ));
         }
-        let err = Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "Invalid channel name",
-        ));
 
-        if self.channel.kind == ChannelType::Category {
-            let re = Regex::new(r"^[\p{L}\p{N}_ -]+$").unwrap();
+        // let err = Err(io::Error::new(
+        //     io::ErrorKind::InvalidInput,
+        //     format!("Invalid channel name: {}", new),
+        // ));
 
-            if !re.is_match(new) {
-                return err;
-            }
-        } else {
-            let re = Regex::new(r"^[\p{L}\p{N}_-]*$").unwrap();
-
-            if !re.is_match(new) {
-                return err;
-            }
-        }
+        // if self.channel.kind == ChannelType::Category {
+        //     let re = Regex::new(r"^[\p{L}\p{N}_ -]+$").unwrap();
+        //
+        //     if !re.is_match(new) {
+        //         return err;
+        //     }
+        // } else {
+        //     let re = Regex::new(r"^[\p{L}\p{N}_-]*$").unwrap();
+        //
+        //     if !re.is_match(new) {
+        //         return err;
+        //     }
+        // }
 
         Ok(())
     }
@@ -160,10 +194,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     };
                     Some(parent.name.clone())
                 };
+                let parent_position = if let Some(parent_id) = channel.parent_id {
+                    channels
+                        .get(&parent_id)
+                        .map(|p| p.position)
+                        .unwrap_or(channel.position)
+                } else {
+                    channel.position
+                };
                 let item = Some(ChannelItem {
                     channel,
                     channel_id,
                     parent_name,
+                    parent_position,
                     http: http.clone(),
                 });
                 if args.all {
@@ -180,7 +223,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             })
             .collect();
-        items.sort_by_key(|item| item.channel.position);
+        items.sort();
         items
     };
     if items.is_empty() {
