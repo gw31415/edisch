@@ -1,13 +1,16 @@
+mod bulk_edit;
+
 use bulk_edit::{bulk_edit, TextEditableItem};
-use clap::Parser;
+use clap::{CommandFactory, Parser};
+use clap_complete::Shell;
 use dialoguer::Confirm;
 use regex::Regex;
 use serenity::{
     all::{ChannelId, ChannelType, EditChannel, GuildChannel, Http},
     model::id::GuildId,
 };
+use std::io::BufWriter;
 use std::{env, fmt::Display, io, sync::Arc};
-mod bulk_edit;
 
 fn is_valid_channel_name(name: &str) -> bool {
     let len = name.chars().count();
@@ -88,11 +91,19 @@ struct Args {
     /// カテゴリチャンネル
     #[clap(long)]
     category: bool,
+    /// Generate shell completion
+    #[arg(long, value_name = "SHELL")]
+    completion: Option<Shell>,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
+    // Shell completion
+    if let Some(shell) = args.completion {
+        shell_completion(shell);
+        return Ok(());
+    }
 
     let token = args.token.unwrap_or(env::var("DISCORD_TOKEN").unwrap());
 
@@ -149,4 +160,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         diff.apply().await?;
     }
     Ok(())
+}
+
+#[cold]
+fn shell_completion(shell: clap_complete::Shell) {
+    let mut stdout = BufWriter::new(io::stdout());
+    let mut cmd = Args::command();
+    let name = cmd.get_name().to_string();
+    clap_complete::generate(shell, &mut cmd, name, &mut stdout);
 }
