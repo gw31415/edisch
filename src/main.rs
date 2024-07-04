@@ -4,6 +4,7 @@ use bulk_edit::{bulk_edit, TextEditableItem};
 use clap::{CommandFactory, Parser};
 use clap_complete::Shell;
 use dialoguer::Confirm;
+use regex::Regex;
 use serenity::{
     all::{ChannelId, ChannelType, EditChannel, GuildChannel, Http},
     model::id::GuildId,
@@ -82,7 +83,8 @@ impl TextEditableItem for ChannelItem {
             ChannelType::Forum => '📣',
             ChannelType::Stage => '🎭',
             _ => '❓',
-        }.to_string();
+        }
+        .to_string();
         let parent_name = self.parent_name.clone();
         if let Some(parent_name) = parent_name {
             comment.push_str(" in ");
@@ -102,24 +104,19 @@ impl TextEditableItem for ChannelItem {
             ));
         }
 
-        // let err = Err(io::Error::new(
-        //     io::ErrorKind::InvalidInput,
-        //     format!("Invalid channel name: {}", new),
-        // ));
+        let err = Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("Invalid channel name: {}", new),
+        ));
 
-        // if self.channel.kind == ChannelType::Category {
-        //     let re = Regex::new(r"^[\p{L}\p{N}_ -]+$").unwrap();
-        //
-        //     if !re.is_match(new) {
-        //         return err;
-        //     }
-        // } else {
-        //     let re = Regex::new(r"^[\p{L}\p{N}_-]*$").unwrap();
-        //
-        //     if !re.is_match(new) {
-        //         return err;
-        //     }
-        // }
+        let re = if self.channel.kind == ChannelType::Category {
+            Regex::new(r"^[\-\w]*|[^\x00-\x7F ]*$").unwrap()
+        } else {
+            Regex::new(r"^[\-\w]*|[^\x00-\x7F]*$").unwrap()
+        };
+        if !re.is_match(new) || new.contains("--") {
+            return err;
+        }
 
         Ok(())
     }
