@@ -279,7 +279,7 @@ async fn run(is_tty: bool) -> Result<()> {
             }
         }
 
-        if !(args.text || args.voice || args.category || args.news || args.forum || args.stage) {
+        if !(args.text || args.voice || args.category || args.news || args.forum || args.stage || args.all) {
             HashMap::new()
         } else {
             guild_id.channels(&http).await?
