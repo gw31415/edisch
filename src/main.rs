@@ -140,6 +140,7 @@ impl TextEditableItem for ChannelItem {
             format!("Invalid channel name: {}", new),
         ));
 
+        // TODO: 文字種やルールの制限が不十分。
         let re = if self.channel.kind == ChannelType::Category {
             Regex::new(r"^[\-\w]*|[^\x00-\x7F ]*$").unwrap()
         } else {
