@@ -216,7 +216,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let http = Arc::new(Http::new(&token));
 
     // 指定したGuildのチャンネル一覧を取得
+    println!("Fetching channels...");
     let channels = guild_id.channels(&http).await?;
+
+    // フィルタリングとパース、ソート
     let items = {
         let mut items: Vec<_> = channels
             .clone()
@@ -261,18 +264,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             })
             .collect();
+        if items.is_empty() {
+            println!("No channels found");
+            return Ok(());
+        }
         items.sort();
         items
     };
-    if items.is_empty() {
-        println!("No channels found");
-        return Ok(());
-    }
+
+    // チャンネル名の一括編集
     let diffs = bulk_edit(items.into_iter())?;
     if diffs.is_empty() {
         println!("No changes to apply");
         return Ok(());
     }
+
+    // OldとNewの表示文字列の幅を揃えるための計算
     let old_width = {
         let max_strwidth = diffs
             .iter()
@@ -289,6 +296,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .unwrap_or(0);
         max_strwidth
     };
+
+    // 変更予定表の表示
     for diff in &diffs {
         let mut old = console::style(pad_str(
             &diff.old,
@@ -312,6 +321,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("{old}{split}{new}  {id}");
     }
 
+    // 変更を適用するか確認
     if !Confirm::new()
         .with_prompt("Do you want to apply these changes?")
         .default(false)
@@ -319,6 +329,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         return Ok(());
     }
+
+    // 変更状況の表示と適用
     for diff in diffs {
         let mut prompt = console::style("Applying:");
         let mut old = console::style(pad_str(
@@ -345,6 +357,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("{prompt} {old}{split}{new}  {id}");
         diff.apply().await?;
     }
+
     Ok(())
 }
 
