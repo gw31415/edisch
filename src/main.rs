@@ -156,10 +156,10 @@ impl TextEditableItem for ChannelItem {
 /// Tool to change Discord channel names in bulk
 #[derive(Parser, Debug)]
 struct Args {
-    /// Bot token
+    /// Bot token. If not provided, it will be read from the DISCORD_TOKEN environment variable
     #[clap(short, long)]
     token: Option<String>,
-    /// Guild ID
+    /// Guild ID. If not provided, it will be read from the GUILD_ID environment variable
     #[clap(short, long)]
     guild_id: Option<u64>,
     /// Edit Text Channels
@@ -180,7 +180,7 @@ struct Args {
     /// Edit Category Channels
     #[clap(long)]
     category: bool,
-    /// Edit all channel types
+    /// Edit All Channels
     #[clap(long)]
     all: bool,
     /// Generate shell completion
