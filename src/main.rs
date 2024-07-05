@@ -208,16 +208,16 @@ async fn main() {
     let is_tty = atty::is(Stream::Stdout);
 
     if let Err(e) = run(is_tty).await {
-        if e.unknown() {
-            let mut prompt = console::style("Unknown error: ");
-            if is_tty {
-                prompt = prompt.red().bold();
-            }
-            eprint!("{}", prompt);
-            eprintln!("{}", e);
+        let mut prompt = console::style(if e.unknown() {
+            "Unknown error: "
         } else {
-            eprintln!("{e}");
+            "error: "
+        });
+        if is_tty {
+            prompt = prompt.red().bold();
         }
+        eprint!("{}", prompt);
+        eprintln!("{}", e);
         std::process::exit(1);
     }
 }
@@ -233,14 +233,17 @@ async fn run(is_tty: bool) -> Result<()> {
     let token = args
         .token
         .unwrap_or(env::var("DISCORD_TOKEN").unwrap_or_default());
+    if token.is_empty() {
+        return Err(Error::MissingArgument("DISCORD_TOKEN".into()));
+    }
 
     // 設定したいGuild ID
-    let guild_id = GuildId::new(args.guild_id.unwrap_or('i: {
+    let guild_id = GuildId::new(args.guild_id.unwrap_or({
         let Ok(id) = env::var("GUILD_ID") else {
-            break 'i 0;
+            return Err(Error::MissingArgument("GUILD_ID".into()));
         };
         let Ok(id) = id.parse() else {
-            break 'i 0;
+            return Err(Error::ParseArgument("GUILD_ID".into()));
         };
         id
     }));

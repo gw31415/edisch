@@ -7,6 +7,13 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// edischのエラー型
 #[derive(Debug, Error)]
 pub enum Error {
+    /// 必要な引数が足りない場合
+    #[error("Missing argument: {0}")]
+    MissingArgument(Cow<'static, str>),
+    /// 引数のパースに失敗した場合
+    #[error("Failed to parse argument: {0}")]
+    ParseArgument(Cow<'static, str>),
+
     /// 編集結果が不正な場合
     #[error("Invalid edit result: {0}")]
     InvalidEditResult(Cow<'static, str>),
