@@ -21,6 +21,15 @@ struct ChannelItem {
     parent_position: u16,
 }
 
+impl ChannelItem {
+    fn is_no_categoryzed_channel(&self) -> bool {
+        self.channel.kind != ChannelType::Category && self.parent_name.is_none()
+    }
+    fn is_voice_like_channel(&self) -> bool {
+        self.channel.kind == ChannelType::Voice || self.channel.kind == ChannelType::Stage
+    }
+}
+
 impl PartialEq for ChannelItem {
     fn eq(&self, other: &Self) -> bool {
         self.channel_id == other.channel_id
@@ -37,15 +46,34 @@ impl PartialOrd for ChannelItem {
 
 impl Ord for ChannelItem {
     fn cmp(&self, other: &Self) -> Ordering {
+        // 無カテゴリチャンネルを一番上にする
+        if self.is_no_categoryzed_channel() && !other.is_no_categoryzed_channel() {
+            return Ordering::Less;
+        } else if !self.is_no_categoryzed_channel() && other.is_no_categoryzed_channel() {
+            return Ordering::Greater;
+        }
+
+        // 同一カテゴリのチャンネルをまとめる
         match self.parent_position.cmp(&other.parent_position) {
             Ordering::Equal => {}
             other => return other,
         }
+
+        // 同一カテゴリ内なら、カテゴリを表すチャンネルを一番上にする
         if self.parent_name.is_some() && other.parent_name.is_none() {
             return Ordering::Greater;
         } else if self.parent_name.is_none() && other.parent_name.is_some() {
             return Ordering::Less;
         }
+
+        // 同一カテゴリ内なら、ボイス系チャンネルを下にする
+        if self.is_voice_like_channel() && !other.is_voice_like_channel() {
+            return Ordering::Greater;
+        } else if !self.is_voice_like_channel() && other.is_voice_like_channel() {
+            return Ordering::Less;
+        }
+
+        // 同一カテゴリ内なら、positionでソート
         match self.channel.parent_id.cmp(&other.channel.parent_id) {
             Ordering::Equal => self.channel.position.cmp(&other.channel.position),
             other => other,
