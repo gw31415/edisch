@@ -30,9 +30,10 @@ pub enum Error {
     #[error("Invalid channel name: {:?} ({})", name, message)]
     InvalidChannelName { name: String, message: &'static str },
 
-    // 以下はキャッチされていないエラー
+    // 以下はキャッチされていないかもしれないエラー
     #[error("{0}")]
     Serenity(#[from] serenity::Error),
+
     #[error("{0}")]
     Dialoguer(#[from] dialoguer::Error),
 }
@@ -41,6 +42,10 @@ impl Error {
     /// 特にキャッチすることを想定していないエラー
     pub fn unknown(&self) -> bool {
         use Error::*;
+        // SerenityのHTTPエラーはオフラインなどなのでキャッチしている扱い
+        if let Serenity(serenity::Error::Http(_)) = self {
+            return false;
+        }
         matches!(self, Serenity(_) | Dialoguer(_))
     }
 }

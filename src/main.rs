@@ -9,12 +9,14 @@ use console::pad_str;
 use dialoguer::Confirm;
 use error::{Error, Result};
 use regex::Regex;
+use scopeguard::defer;
 use serenity::{
     all::{ChannelId, ChannelType, EditChannel, GuildChannel, Http},
     model::id::GuildId,
 };
 use std::{
     cmp::Ordering,
+    collections::HashMap,
     env,
     fmt::Display,
     io::{self, stdout, BufWriter, Write},
@@ -208,15 +210,20 @@ async fn main() {
     let is_tty = atty::is(Stream::Stdout);
 
     if let Err(e) = run(is_tty).await {
-        let mut prompt = console::style(if e.unknown() {
-            "Unknown error: "
+        let prompt = if e.unknown() {
+            let mut p = console::style("UNKNOWN ERROR");
+            if is_tty {
+                p = p.on_red().bold();
+            }
+            p
         } else {
-            "error: "
-        });
-        if is_tty {
-            prompt = prompt.red().bold();
-        }
-        eprint!("{}", prompt);
+            let mut p = console::style("error:");
+            if is_tty {
+                p = p.red().bold();
+            }
+            p
+        };
+        eprint!("{} ", prompt);
         eprintln!("{}", e);
         std::process::exit(1);
     }
@@ -261,12 +268,22 @@ async fn run(is_tty: bool) -> Result<()> {
         println!("{msg}");
         stdout().flush().unwrap();
     }
-    let channels = guild_id.channels(&http).await?;
-    if is_tty {
-        // チャンネル一覧取得中の表示を消す
-        print!("\x1B[1A\x1B[2K");
-        stdout().flush().unwrap();
-    }
+
+    let channels = {
+        defer! {
+            if is_tty {
+                // チャンネル一覧取得中の表示を消す
+                print!("\x1B[1A\x1B[2K");
+                stdout().flush().unwrap();
+            }
+        }
+
+        if !(args.text || args.voice || args.category || args.news || args.forum || args.stage) {
+            HashMap::new()
+        } else {
+            guild_id.channels(&http).await?
+        }
+    };
 
     // フィルタリングとパース、ソート
     let items = {

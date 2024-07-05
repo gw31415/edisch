@@ -456,6 +456,7 @@ dependencies = [
  "console",
  "dialoguer",
  "regex",
+ "scopeguard",
  "serenity",
  "thiserror",
  "tokio",
