@@ -10,15 +10,15 @@ Tool to change Discord channel names in bulk
 Usage: edisch [OPTIONS]
 
 Options:
-  -t, --token <TOKEN>        Bot token
-  -g, --guild-id <GUILD_ID>  Guild ID
+  -t, --token <TOKEN>        Bot token. If not provided, it will be read from the DISCORD_TOKEN environment variable
+  -g, --guild-id <GUILD_ID>  Guild ID. If not provided, it will be read from the GUILD_ID environment variable
       --text                 Edit Text Channels
       --voice                Edit Voice Channels
       --forum                Edit Forum Channels
       --stage                Edit Stage Channels
       --news                 Edit News Channels
       --category             Edit Category Channels
-      --all                  Edit all channel types
+      --all                  Edit All Channels
       --completion <SHELL>   Generate shell completion [possible values: bash, elvish, fish, powershell, zsh]
   -h, --help                 Print help
 ```
