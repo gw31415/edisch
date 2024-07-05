@@ -33,7 +33,7 @@ fn edit(contents: impl Display) -> Result<String, io::Error> {
 }
 
 /// 一括変更することができるアイテム
-pub trait TextEditableItem: Display {
+pub trait TextEditableItem {
     /// テキスト部分の抽出
     fn content(&self) -> String;
     /// テキストを適用する
