@@ -161,13 +161,13 @@ impl TextEditableItem for ChannelItem {
     }
 }
 
-/// Tool to change Discord channel names in bulk
+/// Tool to change Discord channel names in bulk with your $EDITOR
 #[derive(Parser, Debug)]
 struct Args {
-    /// Bot token. If not provided, it will be read from the DISCORD_TOKEN environment variable
+    /// Bot token. If not provided, it will be read from the $DISCORD_TOKEN environment variable
     #[clap(short, long)]
     token: Option<String>,
-    /// Guild ID. If not provided, it will be read from the GUILD_ID environment variable
+    /// Guild ID. If not provided, it will be read from the $GUILD_ID environment variable
     #[clap(short, long)]
     guild_id: Option<u64>,
     /// Edit Text Channels
