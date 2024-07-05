@@ -35,4 +35,5 @@ Options:
       --all                  Edit All Channels
       --completion <SHELL>   Generate shell completion [possible values: bash, elvish, fish, powershell, zsh]
   -h, --help                 Print help
+  -V, --version              Print version
 ```
