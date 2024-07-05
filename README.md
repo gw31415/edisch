@@ -1,8 +1,20 @@
 # Edisch - Edit Discord Channels
 
+[![Crates.io](https://img.shields.io/crates/v/edisch?style=flat-square)](https://crates.io/crates/edisch)
+[![Crates.io](https://img.shields.io/crates/d/edisch?style=flat-square)](https://crates.io/crates/edisch)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](LICENSE)
+
 Tool to change Discord channel names in bulk with your $EDITOR
 
 https://github.com/gw31415/edisch/assets/24710985/3c44ab26-0911-4c14-91fe-ed1fcab008dc
+
+## Installation
+
+### From source
+
+```bash
+cargo install --git https://github.com/gw31415/edisch
+```
 
 ## Usage
 
@@ -23,12 +35,4 @@ Options:
       --all                  Edit All Channels
       --completion <SHELL>   Generate shell completion [possible values: bash, elvish, fish, powershell, zsh]
   -h, --help                 Print help
-```
-
-## Installation
-
-### From source
-
-```bash
-cargo install --git https://github.com/gw31415/edisch
 ```
