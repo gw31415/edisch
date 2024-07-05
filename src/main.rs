@@ -1,8 +1,10 @@
 mod bulk_edit;
 
+use atty::Stream;
 use bulk_edit::{bulk_edit, TextEditableItem};
 use clap::{CommandFactory, Parser};
 use clap_complete::Shell;
+use console::pad_str;
 use dialoguer::Confirm;
 use regex::Regex;
 use serenity::{
@@ -11,6 +13,7 @@ use serenity::{
 };
 use std::{cmp::Ordering, io::BufWriter};
 use std::{env, fmt::Display, io, sync::Arc};
+use unicode_width::UnicodeWidthStr;
 
 #[derive(Clone)]
 struct ChannelItem {
@@ -194,6 +197,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
+    let istty = atty::is(Stream::Stdout);
+
     let token = args.token.unwrap_or(env::var("DISCORD_TOKEN").unwrap());
 
     // 設定したいGuild ID
@@ -260,8 +265,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("No changes to apply");
         return Ok(());
     }
+    let old_width = {
+        let max_strwidth = diffs
+            .iter()
+            .map(|diff| UnicodeWidthStr::width(diff.old.as_str()))
+            .max()
+            .unwrap_or(0);
+        max_strwidth
+    };
+    let new_width = {
+        let max_strwidth = diffs
+            .iter()
+            .map(|diff| UnicodeWidthStr::width(diff.new.as_str()))
+            .max()
+            .unwrap_or(0);
+        max_strwidth
+    };
     for diff in &diffs {
-        println!("{}", diff);
+        let mut old = pad_str(&diff.old, old_width, console::Alignment::Left, None).to_string();
+        let mut new = pad_str(&diff.new, new_width, console::Alignment::Left, None).to_string();
+        let mut split = " -> ".to_string();
+        if istty {
+            old = format!("{}", console::style(old).green());
+            new = format!("{}", console::style(new).green());
+            split = format!("{}", console::style(split).dim());
+        }
+        let id = &diff.item;
+        println!("{old}{split}{new}  ({id})");
     }
 
     if !Confirm::new()
@@ -272,7 +302,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
     for diff in diffs {
-        println!("Applying {}", diff);
+        let mut old = pad_str(&diff.old, old_width, console::Alignment::Left, None).to_string();
+        let mut new = pad_str(&diff.new, new_width, console::Alignment::Left, None).to_string();
+        let mut split = " -> ".to_string();
+        if istty {
+            old = format!("{}", console::style(old).green());
+            new = format!("{}", console::style(new).green());
+            split = format!("{}", console::style(split).dim());
+        }
+        let id = &diff.item;
+        println!("Applying: {old}{split}{new}  ({id})");
         diff.apply().await?;
     }
     Ok(())

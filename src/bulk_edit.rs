@@ -50,16 +50,12 @@ pub trait TextEditableItem: Display {
 
 /// 変更を表す
 pub struct Diff<T: TextEditableItem> {
-    old: String,
-    new: String,
-    item: T,
-}
-
-impl<T: TextEditableItem> Display for Diff<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let Diff { item, old, new } = self;
-        write!(f, "{item}: {old} -> {new}")
-    }
+    /// 変更前のテキスト
+    pub old: String,
+    /// 変更後のテキスト
+    pub new: String,
+    /// 変更前のアイテム
+    pub item: T,
 }
 
 impl<T: TextEditableItem> Diff<T> {
