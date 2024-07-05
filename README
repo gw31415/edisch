@@ -11,5 +11,6 @@ Options:
       --stage                Edit Stage Channels
       --news                 Edit News Channels
       --category             Edit Category Channels
+      --all                  Edit all channel types
       --completion <SHELL>   Generate shell completion [possible values: bash, elvish, fish, powershell, zsh]
   -h, --help                 Print help
