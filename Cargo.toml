@@ -11,5 +11,6 @@ console = "0.15.8"
 dialoguer = "0.11.0"
 regex = "1.10.5"
 serenity = "0.12.2"
+thiserror = "1.0.61"
 tokio = { version = "1.38.0", features = ["full"] }
 unicode-width = "0.1.13"

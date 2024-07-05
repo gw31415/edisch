@@ -457,6 +457,7 @@ dependencies = [
  "dialoguer",
  "regex",
  "serenity",
+ "thiserror",
  "tokio",
  "unicode-width",
 ]

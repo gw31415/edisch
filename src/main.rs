@@ -1,4 +1,5 @@
 mod bulk_edit;
+mod error;
 
 use atty::Stream;
 use bulk_edit::{bulk_edit, TextEditableItem};
@@ -6,13 +7,19 @@ use clap::{CommandFactory, Parser};
 use clap_complete::Shell;
 use console::pad_str;
 use dialoguer::Confirm;
+use error::{Error, Result};
 use regex::Regex;
 use serenity::{
     all::{ChannelId, ChannelType, EditChannel, GuildChannel, Http},
     model::id::GuildId,
 };
-use std::{cmp::Ordering, io::BufWriter};
-use std::{env, fmt::Display, io, sync::Arc};
+use std::{
+    cmp::Ordering,
+    env,
+    fmt::Display,
+    io::{self, stdout, BufWriter, Write},
+    sync::Arc,
+};
 use unicode_width::UnicodeWidthStr;
 
 #[derive(Clone)]
@@ -98,7 +105,7 @@ impl Display for ChannelItem {
 }
 
 impl TextEditableItem for ChannelItem {
-    async fn apply(&mut self, content: String) -> Result<(), io::Error> {
+    async fn apply(&mut self, content: String) -> Result<()> {
         let editchannel = EditChannel::new().name(content);
         self.channel_id
             .edit(self.http.clone(), editchannel)
@@ -133,19 +140,19 @@ impl TextEditableItem for ChannelItem {
         comment.push(')');
         comment
     }
-    fn validate(&self, new: &str) -> Result<(), io::Error> {
+    fn validate(&self, new: &str) -> Result<()> {
         let len = new.chars().count();
         if !(2..=100).contains(&len) {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "Channel name must be between 2 and 100 characters",
-            ));
+            return Err(Error::InvalidChannelName {
+                name: new.to_string(),
+                message: "Channel name must be between 2 and 100 characters",
+            });
         }
 
-        let err = Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!("Invalid channel name: {}", new),
-        ));
+        let err = Err(Error::InvalidChannelName {
+            name: new.to_string(),
+            message: "Contains characters or patterns that cannot be used",
+        });
 
         // TODO: 文字種やルールの制限が不十分。
         let re = if self.channel.kind == ChannelType::Category {
@@ -197,7 +204,25 @@ struct Args {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() {
+    let is_tty = atty::is(Stream::Stdout);
+
+    if let Err(e) = run(is_tty).await {
+        if e.unknown() {
+            let mut prompt = console::style("Unknown error: ");
+            if is_tty {
+                prompt = prompt.red().bold();
+            }
+            eprint!("{}", prompt);
+            eprintln!("{}", e);
+        } else {
+            eprintln!("{e}");
+        }
+        std::process::exit(1);
+    }
+}
+
+async fn run(is_tty: bool) -> Result<()> {
     let args = Args::parse();
     // Shell completion
     if let Some(shell) = args.completion {
@@ -205,19 +230,40 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    let istty = atty::is(Stream::Stdout);
-
-    let token = args.token.unwrap_or(env::var("DISCORD_TOKEN").unwrap());
+    let token = args
+        .token
+        .unwrap_or(env::var("DISCORD_TOKEN").unwrap_or_default());
 
     // 設定したいGuild ID
-    let guild_id = GuildId::new(args.guild_id.unwrap_or(env::var("GUILD_ID")?.parse()?));
+    let guild_id = GuildId::new(args.guild_id.unwrap_or('i: {
+        let Ok(id) = env::var("GUILD_ID") else {
+            break 'i 0;
+        };
+        let Ok(id) = id.parse() else {
+            break 'i 0;
+        };
+        id
+    }));
 
     // クライアントを初期化
     let http = Arc::new(Http::new(&token));
 
     // 指定したGuildのチャンネル一覧を取得
-    println!("Fetching channels...");
+    {
+        // チャンネル一覧取得中の表示
+        let mut msg = console::style("Fetching channels...");
+        if is_tty {
+            msg = msg.dim();
+        }
+        println!("{msg}");
+        stdout().flush().unwrap();
+    }
     let channels = guild_id.channels(&http).await?;
+    if is_tty {
+        // チャンネル一覧取得中の表示を消す
+        print!("\x1B[1A\x1B[2K");
+        stdout().flush().unwrap();
+    }
 
     // フィルタリングとパース、ソート
     let items = {
@@ -313,7 +359,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ));
         let mut id = console::style(format!("({})", diff.item));
         let split = " -> ".to_string();
-        if istty {
+        if is_tty {
             old = old.green();
             new = new.green();
             id = id.dim().italic();
@@ -347,7 +393,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ));
         let mut id = console::style(format!("({})", diff.item));
         let split = " -> ".to_string();
-        if istty {
+        if is_tty {
             prompt = prompt.blue().bold();
             old = old.green();
             new = new.green();

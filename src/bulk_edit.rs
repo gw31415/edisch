@@ -1,11 +1,15 @@
-use std::env::{self, temp_dir};
-use std::fmt::Display;
-use std::fs::File;
-use std::io::{self, Read, Write};
-use std::process::Command;
+use crate::error::{Error, Result};
+use std::{
+    borrow::Cow::Borrowed,
+    env::{self, temp_dir},
+    fmt::Display,
+    fs::File,
+    io::{Read, Write},
+    process::Command,
+};
 
 /// テキストエディタを起動し、指定された内容を編集する
-fn edit(contents: impl Display) -> Result<String, io::Error> {
+fn edit(contents: impl Display) -> Result<String> {
     // 一時ファイルを作成し、パスとファイルハンドルを返す
     let tempfile = {
         let mut path = temp_dir();
@@ -20,7 +24,7 @@ fn edit(contents: impl Display) -> Result<String, io::Error> {
         .arg(&tempfile)
         .status()?;
     if !status.success() {
-        return Err(io::Error::new(io::ErrorKind::Other, "EDITOR failed"));
+        return Err(Error::Command(status.code()));
     }
 
     // 編集結果の取得
@@ -37,13 +41,13 @@ pub trait TextEditableItem {
     /// テキスト部分の抽出
     fn content(&self) -> String;
     /// テキストを適用する
-    async fn apply(&mut self, content: String) -> Result<(), io::Error>;
+    async fn apply(&mut self, content: String) -> Result<()>;
     /// コメント
     fn comment(&self) -> String {
         String::new()
     }
     /// バリデーション
-    fn validate(&self, _new: &str) -> Result<(), io::Error> {
+    fn validate(&self, _new: &str) -> Result<()> {
         Ok(())
     }
 }
@@ -59,7 +63,7 @@ pub struct Diff<T: TextEditableItem> {
 }
 
 impl<T: TextEditableItem> Diff<T> {
-    pub async fn apply(self) -> Result<(), io::Error> {
+    pub async fn apply(self) -> Result<()> {
         let Diff { new, mut item, .. } = self;
         item.apply(new).await
     }
@@ -68,7 +72,10 @@ impl<T: TextEditableItem> Diff<T> {
 /// テキストエディタで一気に変更する
 pub fn bulk_edit<T: TextEditableItem>(
     items: impl ExactSizeIterator<Item = T> + Clone,
-) -> Result<Vec<Diff<T>>, io::Error> {
+) -> Result<Vec<Diff<T>>> {
+    const ITEM_COUNT_MISSMATCH_ERROR: Error =
+        Error::InvalidEditResult(Borrowed("item count mismatch"));
+
     let len = items.len();
     let text = items
         .clone()
@@ -84,8 +91,9 @@ pub fn bulk_edit<T: TextEditableItem>(
         })
         .collect::<Vec<_>>()
         .join("\n");
+
     if len != text.lines().count() {
-        return Err(io::Error::new(io::ErrorKind::Other, "item count mismatch"));
+        return Err(ITEM_COUNT_MISSMATCH_ERROR);
     }
     let text = {
         let mut text = edit(text)?;
@@ -94,7 +102,7 @@ pub fn bulk_edit<T: TextEditableItem>(
             text.pop();
         }
         if len != text.lines().count() {
-            return Err(io::Error::new(io::ErrorKind::Other, "item count mismatch"));
+            return Err(ITEM_COUNT_MISSMATCH_ERROR);
         }
         text
     };
