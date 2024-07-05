@@ -282,14 +282,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         max_strwidth
     };
     for diff in &diffs {
-        let mut old = pad_str(&diff.old, old_width, console::Alignment::Left, None).to_string();
-        let mut new = pad_str(&diff.new, new_width, console::Alignment::Left, None).to_string();
-        let mut id = format!("({})", diff.item);
+        let mut old = console::style(pad_str(
+            &diff.old,
+            old_width,
+            console::Alignment::Left,
+            None,
+        ));
+        let mut new = console::style(pad_str(
+            &diff.new,
+            new_width,
+            console::Alignment::Left,
+            None,
+        ));
+        let mut id = console::style(format!("({})", diff.item));
         let split = " -> ".to_string();
         if istty {
-            old = format!("{}", console::style(old).green());
-            new = format!("{}", console::style(new).green());
-            id = format!("{}", console::style(id).dim().italic());
+            old = old.green();
+            new = new.green();
+            id = id.dim().italic();
         }
         println!("{old}{split}{new}  {id}");
     }
