@@ -172,6 +172,7 @@ impl TextEditableItem for ChannelItem {
 
 /// Tool to change Discord channel names in bulk with your $EDITOR
 #[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
 struct Args {
     /// Bot token. If not provided, it will be read from the $DISCORD_TOKEN environment variable
     #[clap(short, long)]

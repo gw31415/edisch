@@ -2,6 +2,12 @@
 name = "edisch"
 version = "0.1.0"
 edition = "2021"
+authors = ["gw31415 <git@amas.dev>"]
+description = "Tool to change Discord channel names in bulk with your $EDITOR"
+license = "Apache-2.0"
+repository = "https://github.com/gw31415/edisch"
+categories = ["command-line-interface"]
+keywords = ["cli", "vim", "discord", "text-editor"]
 
 [dependencies]
 atty = "0.2.14"
