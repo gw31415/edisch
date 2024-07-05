@@ -21,7 +21,7 @@ struct ChannelItem {
     channel_id: ChannelId,
     http: Arc<Http>,
     parent_name: Option<String>,
-    parent_position: u16,
+    category_position: u16,
 }
 
 impl ChannelItem {
@@ -57,7 +57,7 @@ impl Ord for ChannelItem {
         }
 
         // 同一カテゴリのチャンネルをまとめる
-        match self.parent_position.cmp(&other.parent_position) {
+        match self.category_position.cmp(&other.category_position) {
             Ordering::Equal => {}
             other => return other,
         }
@@ -225,7 +225,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     };
                     Some(parent.name.clone())
                 };
-                let parent_position = if let Some(parent_id) = channel.parent_id {
+                let category_position = if let Some(parent_id) = channel.parent_id {
                     channels
                         .get(&parent_id)
                         .map(|p| p.position)
@@ -237,7 +237,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     channel,
                     channel_id,
                     parent_name,
-                    parent_position,
+                    category_position,
                     http: http.clone(),
                 });
                 if args.all {
