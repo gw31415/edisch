@@ -2,6 +2,8 @@
 
 Tool to change Discord channel names in bulk.
 
+https://github.com/gw31415/edisch/assets/24710985/3c44ab26-0911-4c14-91fe-ed1fcab008dc
+
 ## Usage
 
 ```
@@ -27,6 +29,6 @@ Options:
 
 ### From source
 
-```sh
+```bash
 cargo install --git https://github.com/gw31415/edisch
 ```
