@@ -107,8 +107,8 @@ impl TextEditableItem for ChannelItem {
             ChannelType::Text => '📝',
             ChannelType::Voice => '🔊',
             ChannelType::Category => '📁',
-            ChannelType::News => '📰',
-            ChannelType::Forum => '📣',
+            ChannelType::News => '📣',
+            ChannelType::Forum => '💬',
             ChannelType::Stage => '🎭',
             _ => '❓',
         }
