@@ -17,10 +17,17 @@ use unicode_width::UnicodeWidthStr;
 
 #[derive(Clone)]
 struct ChannelItem {
-    channel: GuildChannel,
-    channel_id: ChannelId,
+    /// Discord HTTPクライアント
     http: Arc<Http>,
+
+    /// チャンネル情報
+    channel: GuildChannel,
+    /// チャンネルID
+    channel_id: ChannelId,
+
+    /// 親チャンネルの名前
     parent_name: Option<String>,
+    /// 所属するカテゴリのposition
     category_position: u16,
 }
 
@@ -234,11 +241,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     channel.position
                 };
                 let item = Some(ChannelItem {
+                    http: http.clone(),
                     channel,
                     channel_id,
                     parent_name,
                     category_position,
-                    http: http.clone(),
                 });
                 if args.all {
                     return item;
