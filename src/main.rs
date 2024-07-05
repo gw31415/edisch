@@ -284,14 +284,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for diff in &diffs {
         let mut old = pad_str(&diff.old, old_width, console::Alignment::Left, None).to_string();
         let mut new = pad_str(&diff.new, new_width, console::Alignment::Left, None).to_string();
-        let mut split = " -> ".to_string();
+        let mut id = format!("({})", diff.item);
+        let split = " -> ".to_string();
         if istty {
             old = format!("{}", console::style(old).green());
             new = format!("{}", console::style(new).green());
-            split = format!("{}", console::style(split).dim());
+            id = format!("{}", console::style(id).dim().italic());
         }
-        let id = &diff.item;
-        println!("{old}{split}{new}  ({id})");
+        println!("{old}{split}{new}  {id}");
     }
 
     if !Confirm::new()
@@ -302,16 +302,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
     for diff in diffs {
-        let mut old = pad_str(&diff.old, old_width, console::Alignment::Left, None).to_string();
-        let mut new = pad_str(&diff.new, new_width, console::Alignment::Left, None).to_string();
-        let mut split = " -> ".to_string();
+        let mut prompt = console::style("Applying:");
+        let mut old = console::style(pad_str(
+            &diff.old,
+            old_width,
+            console::Alignment::Left,
+            None,
+        ));
+        let mut new = console::style(pad_str(
+            &diff.new,
+            new_width,
+            console::Alignment::Left,
+            None,
+        ));
+        let mut id = console::style(format!("({})", diff.item));
+        let split = " -> ".to_string();
         if istty {
-            old = format!("{}", console::style(old).green());
-            new = format!("{}", console::style(new).green());
-            split = format!("{}", console::style(split).dim());
+            prompt = prompt.blue().bold();
+            old = old.green();
+            new = new.green();
+            id = id.dim().italic();
         }
-        let id = &diff.item;
-        println!("Applying: {old}{split}{new}  ({id})");
+
+        println!("{prompt} {old}{split}{new}  {id}");
         diff.apply().await?;
     }
     Ok(())
