@@ -3,7 +3,7 @@ mod error;
 
 use atty::Stream;
 use bulk_edit::{bulk_edit, TextEditableItem};
-use clap::{CommandFactory, Parser};
+use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::Shell;
 use console::pad_str;
 use dialoguer::Confirm;
@@ -172,8 +172,10 @@ impl TextEditableItem for ChannelItem {
 
 /// Tool to change Discord channel names in bulk with your $EDITOR
 #[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
+#[command(author, version, about, long_about = None, args_conflicts_with_subcommands = true)]
 struct Args {
+    #[clap(subcommand)]
+    subcommand: Option<Commands>,
     /// Bot token. If not provided, it will be read from the $DISCORD_TOKEN environment variable
     #[clap(short, long)]
     token: Option<String>,
@@ -201,9 +203,12 @@ struct Args {
     /// Edit All Channels
     #[clap(long)]
     all: bool,
-    /// Generate shell completion
-    #[arg(long, value_name = "SHELL")]
-    completion: Option<Shell>,
+}
+
+#[derive(Debug, Subcommand)]
+enum Commands {
+    #[command(about = "Generate shell completion")]
+    Completion { shell: Shell },
 }
 
 impl Args {
@@ -245,13 +250,16 @@ async fn main() {
 async fn run(is_tty: bool) -> Result<()> {
     let args = Args::parse();
     // Shell completion
-    if let Some(shell) = args.completion {
-        shell_completion(shell);
+    if let Some(cmd) = args.subcommand {
+        match cmd {
+            Commands::Completion { shell } => shell_completion(shell),
+        }
         return Ok(());
     }
 
     let token = args
-        .token.clone()
+        .token
+        .clone()
         .unwrap_or(env::var("DISCORD_TOKEN").unwrap_or_default());
     if token.is_empty() {
         return Err(Error::MissingArgument("DISCORD_TOKEN".into()));
