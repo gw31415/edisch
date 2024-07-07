@@ -207,8 +207,11 @@ struct Args {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
-    #[command(about = "Generate shell completion")]
-    Completion { shell: Shell },
+    /// Generate shell completion
+    Completion {
+        /// Shell to generate completion for
+        shell: Shell,
+    },
 }
 
 impl Args {
