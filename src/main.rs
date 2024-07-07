@@ -206,6 +206,18 @@ struct Args {
     completion: Option<Shell>,
 }
 
+impl Args {
+    fn any_channels(&self) -> bool {
+        self.text
+            || self.voice
+            || self.category
+            || self.news
+            || self.forum
+            || self.stage
+            || self.all
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let is_tty = atty::is(Stream::Stdout);
@@ -239,7 +251,7 @@ async fn run(is_tty: bool) -> Result<()> {
     }
 
     let token = args
-        .token
+        .token.clone()
         .unwrap_or(env::var("DISCORD_TOKEN").unwrap_or_default());
     if token.is_empty() {
         return Err(Error::MissingArgument("DISCORD_TOKEN".into()));
@@ -279,7 +291,7 @@ async fn run(is_tty: bool) -> Result<()> {
             }
         }
 
-        if !(args.text || args.voice || args.category || args.news || args.forum || args.stage || args.all) {
+        if !args.any_channels() {
             HashMap::new()
         } else {
             guild_id.channels(&http).await?
