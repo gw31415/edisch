@@ -188,7 +188,7 @@ struct Args {
     filter: ChannelFilter,
 }
 
-#[derive(clap::Args, Debug, Clone)]
+#[derive(clap::Args, Debug, Clone, Default)]
 struct ChannelFilter {
     /// Edit Text Channels
     #[clap(long)]
@@ -225,8 +225,6 @@ enum Commands {
         /// File to export to
         #[clap(short, long)]
         output: Option<PathBuf>,
-        #[clap(flatten)]
-        filter: ChannelFilter,
     },
     // /// Apply channel names from a file or stdin
     // Apply {
@@ -281,8 +279,11 @@ async fn run(is_tty: bool) -> Result<()> {
     }
 
     let filter = match args.subcommand {
-        Some(Commands::Export { ref filter, .. }) => filter,
-        _ => &args.filter,
+        Some(Commands::Export { .. }) => ChannelFilter {
+            all: true,
+            ..Default::default()
+        },
+        _ => args.filter,
     };
 
     let token = args

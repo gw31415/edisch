@@ -105,7 +105,7 @@ impl<T: TextEditableItem> Editor<T> {
         })
     }
     pub fn edit(&mut self) -> Result<()> {
-        let mut text = edit(&self.lines.join("\n"))?;
+        let mut text = edit(self)?;
         // 最後の文字が改行の場合削除
         if text.ends_with('\n') {
             text.pop();
