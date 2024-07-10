@@ -2,7 +2,7 @@ mod bulk_edit;
 mod error;
 
 use atty::Stream;
-use bulk_edit::{bulk_edit, TextEditableItem};
+use bulk_edit::{Editor, TextEditableItem};
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::Shell;
 use console::pad_str;
@@ -20,6 +20,7 @@ use std::{
     env,
     fmt::Display,
     io::{self, stdout, BufWriter, Write},
+    path::PathBuf,
     sync::Arc,
 };
 use unicode_width::UnicodeWidthStr;
@@ -177,11 +178,18 @@ struct Args {
     #[clap(subcommand)]
     subcommand: Option<Commands>,
     /// Bot token. If not provided, it will be read from the $DISCORD_TOKEN environment variable
-    #[clap(short, long)]
+    #[clap(short, long, global = true)]
     token: Option<String>,
     /// Guild ID. If not provided, it will be read from the $GUILD_ID environment variable
-    #[clap(short, long)]
+    #[clap(short, long, global = true)]
     guild_id: Option<u64>,
+    /// Filter text channels
+    #[clap(flatten)]
+    filter: ChannelFilter,
+}
+
+#[derive(clap::Args, Debug, Clone)]
+struct ChannelFilter {
     /// Edit Text Channels
     #[clap(long)]
     text: bool,
@@ -212,9 +220,23 @@ enum Commands {
         /// Shell to generate completion for
         shell: Shell,
     },
+    /// Export channel names to a file or stdout
+    Export {
+        /// File to export to
+        #[clap(short, long)]
+        output: Option<PathBuf>,
+        #[clap(flatten)]
+        filter: ChannelFilter,
+    },
+    // /// Apply channel names from a file or stdin
+    // Apply {
+    //     /// File to apply from
+    //     #[clap(short, long)]
+    //     input: Option<PathBuf>,
+    // },
 }
 
-impl Args {
+impl ChannelFilter {
     fn any_channels(&self) -> bool {
         self.text
             || self.voice
@@ -228,7 +250,7 @@ impl Args {
 
 #[tokio::main]
 async fn main() {
-    let is_tty = atty::is(Stream::Stdout);
+    let is_tty = atty::is(Stream::Stderr);
 
     if let Err(e) = run(is_tty).await {
         let prompt = if e.unknown() {
@@ -253,12 +275,15 @@ async fn main() {
 async fn run(is_tty: bool) -> Result<()> {
     let args = Args::parse();
     // Shell completion
-    if let Some(cmd) = args.subcommand {
-        match cmd {
-            Commands::Completion { shell } => shell_completion(shell),
-        }
+    if let Some(Commands::Completion { shell }) = args.subcommand {
+        shell_completion(shell);
         return Ok(());
     }
+
+    let filter = match args.subcommand {
+        Some(Commands::Export { ref filter, .. }) => filter,
+        _ => &args.filter,
+    };
 
     let token = args
         .token
@@ -289,7 +314,7 @@ async fn run(is_tty: bool) -> Result<()> {
         if is_tty {
             msg = msg.dim();
         }
-        println!("{msg}");
+        eprintln!("{msg}");
         stdout().flush().unwrap();
     }
 
@@ -297,12 +322,12 @@ async fn run(is_tty: bool) -> Result<()> {
         defer! {
             if is_tty {
                 // チャンネル一覧取得中の表示を消す
-                print!("\x1B[1A\x1B[2K");
+                eprint!("\x1B[1A\x1B[2K");
                 stdout().flush().unwrap();
             }
         }
 
-        if !args.any_channels() {
+        if !filter.any_channels() {
             HashMap::new()
         } else {
             guild_id.channels(&http).await?
@@ -340,22 +365,22 @@ async fn run(is_tty: bool) -> Result<()> {
                     parent_name,
                     category_position,
                 });
-                if args.all {
+                if filter.all {
                     return item;
                 }
                 match kind {
-                    ChannelType::Text if args.text => item,
-                    ChannelType::Voice if args.voice => item,
-                    ChannelType::Category if args.category => item,
-                    ChannelType::News if args.news => item,
-                    ChannelType::Forum if args.forum => item,
-                    ChannelType::Stage if args.stage => item,
+                    ChannelType::Text if filter.text => item,
+                    ChannelType::Voice if filter.voice => item,
+                    ChannelType::Category if filter.category => item,
+                    ChannelType::News if filter.news => item,
+                    ChannelType::Forum if filter.forum => item,
+                    ChannelType::Stage if filter.stage => item,
                     _ => None,
                 }
             })
             .collect();
         if items.is_empty() {
-            println!("No channels found");
+            eprintln!("No channels found");
             return Ok(());
         }
         items.sort();
@@ -363,9 +388,24 @@ async fn run(is_tty: bool) -> Result<()> {
     };
 
     // チャンネル名の一括編集
-    let diffs = bulk_edit(items.into_iter())?;
+    let mut editor = Editor::new(items.into_iter())?;
+    if let Some(Commands::Export { output, .. }) = args.subcommand {
+        let mut output = output.map_or_else(
+            || Box::new(BufWriter::new(stdout())) as Box<dyn io::Write>,
+            |p| {
+                let file = std::fs::File::create(p).unwrap();
+                Box::new(BufWriter::new(file)) as Box<dyn io::Write>
+            },
+        );
+        writeln!(output, "{}", editor)?;
+        return Ok(());
+    }
+    let diffs: Vec<_> = {
+        editor.edit()?;
+        editor.try_into()?
+    };
     if diffs.is_empty() {
-        println!("No changes to apply");
+        eprintln!("No changes to apply");
         return Ok(());
     }
 
@@ -408,7 +448,7 @@ async fn run(is_tty: bool) -> Result<()> {
             new = new.green();
             id = id.dim().italic();
         }
-        println!("{old}{split}{new}  {id}");
+        eprintln!("{old}{split}{new}  {id}");
     }
 
     // 変更を適用するか確認
@@ -444,7 +484,7 @@ async fn run(is_tty: bool) -> Result<()> {
             id = id.dim().italic();
         }
 
-        println!("{prompt} {old}{split}{new}  {id}");
+        eprintln!("{prompt} {old}{split}{new}  {id}");
         diff.apply().await?;
     }
 

@@ -18,6 +18,10 @@ pub enum Error {
     #[error("Invalid edit result: {0}")]
     InvalidEditResult(Cow<'static, str>),
 
+    /// 編集できる対象ではなかった場合
+    #[error("Not an editable item names: {0}")]
+    NotEditableItem(Cow<'static, str>),
+
     /// ファイルの読み書きに失敗した場合 (一時ファイルなど)
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
