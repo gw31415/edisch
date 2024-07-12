@@ -10,10 +10,10 @@ https://github.com/gw31415/edisch/assets/24710985/3c44ab26-0911-4c14-91fe-ed1fca
 
 ## Installation
 
-### From source
+### Cargo
 
 ```bash
-cargo install --git https://github.com/gw31415/edisch
+cargo install edisch
 ```
 
 ## Usage
