@@ -45,6 +45,8 @@ Options:
   -V, --version              Print version
 ```
 
+If you use Vim/Neovim, [edisch.vim](https://github.com/gw31415/edisch.vim) might be useful.
+
 ### Examples
 
 ```bash
