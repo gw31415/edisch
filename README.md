@@ -25,9 +25,9 @@ Usage: edisch [OPTIONS]
        edisch <COMMAND>
 
 Commands:
-  completion  Generate shell completion
   export      Export all channel names to a file or stdout
   apply       Apply all channel names from a file or stdin
+  completion  Generate shell completion
   help        Print this message or the help of the given subcommand(s)
 
 Options:
