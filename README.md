@@ -22,6 +22,13 @@ cargo install edisch
 Tool to change Discord channel names in bulk with your $EDITOR
 
 Usage: edisch [OPTIONS]
+       edisch <COMMAND>
+
+Commands:
+  completion  Generate shell completion
+  export      Export all channel names to a file or stdout
+  apply       Apply all channel names from a file or stdin
+  help        Print this message or the help of the given subcommand(s)
 
 Options:
   -t, --token <TOKEN>        Bot token. If not provided, it will be read from the $DISCORD_TOKEN environment variable
@@ -33,7 +40,17 @@ Options:
       --news                 Edit News Channels
       --category             Edit Category Channels
       --all                  Edit All Channels
-      --completion <SHELL>   Generate shell completion [possible values: bash, elvish, fish, powershell, zsh]
+  -y, --yes                  Automatically confirm all changes
   -h, --help                 Print help
   -V, --version              Print version
+```
+
+### Examples
+
+```bash
+# Edit all text channels in the guild
+edisch --text
+
+# Batch edit all channels in the guild
+edisch export | sed 's/old/new/g' | edisch apply -y
 ```
