@@ -1,10 +1,11 @@
+mod args;
 mod bulk_edit;
 mod error;
 
+use args::{ApplyArgs, Args, IOMode, Work};
 use atty::Stream;
 use bulk_edit::{Editor, TextEditableItem};
-use clap::{CommandFactory, Parser, Subcommand};
-use clap_complete::Shell;
+use clap::{CommandFactory, Parser};
 use console::pad_str;
 use dialoguer::Confirm;
 use error::{Error, Result};
@@ -21,7 +22,6 @@ use std::{
     fmt::Display,
     fs::File,
     io::{self, stdin, stdout, BufReader, BufWriter, Read, Write},
-    path::PathBuf,
     sync::Arc,
 };
 use unicode_width::UnicodeWidthStr;
@@ -172,95 +172,6 @@ impl TextEditableItem for ChannelItem {
     }
 }
 
-/// Tool to change Discord channel names in bulk with your $EDITOR
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None, args_conflicts_with_subcommands = true)]
-struct Args {
-    #[clap(subcommand)]
-    subcommand: Option<Commands>,
-    /// Discord connection options
-    #[clap(flatten)]
-    discord: DiscordConnectionArgs,
-    /// Filter text channels
-    #[clap(flatten)]
-    filter: ChannelFilterArgs,
-}
-
-/// Token and Guild ID for Discord connection
-#[derive(clap::Args, Debug)]
-struct DiscordConnectionArgs {
-    /// Bot token. If not provided, it will be read from the $DISCORD_TOKEN environment variable
-    #[clap(short, long)]
-    token: Option<String>,
-    /// Guild ID. If not provided, it will be read from the $GUILD_ID environment variable
-    #[clap(short, long)]
-    guild_id: Option<u64>,
-}
-
-#[derive(clap::Args, Debug, Clone, Default)]
-struct ChannelFilterArgs {
-    /// Edit Text Channels
-    #[clap(long)]
-    text: bool,
-    /// Edit Voice Channels
-    #[clap(long)]
-    voice: bool,
-    /// Edit Forum Channels
-    #[clap(long)]
-    forum: bool,
-    /// Edit Stage Channels
-    #[clap(long)]
-    stage: bool,
-    /// Edit News Channels
-    #[clap(long)]
-    news: bool,
-    /// Edit Category Channels
-    #[clap(long)]
-    category: bool,
-    /// Edit All Channels
-    #[clap(long)]
-    all: bool,
-}
-
-#[derive(Debug, Subcommand)]
-enum Commands {
-    /// Generate shell completion
-    Completion {
-        /// Shell to generate completion for
-        shell: Shell,
-    },
-    /// Export all channel names to a file or stdout
-    Export {
-        /// Discord connection options
-        #[clap(flatten)]
-        discord: DiscordConnectionArgs,
-        /// File to export to
-        #[clap(short, long)]
-        output: Option<PathBuf>,
-    },
-    /// Apply all channel names from a file or stdin
-    Apply {
-        /// Discord connection options
-        #[clap(flatten)]
-        discord: DiscordConnectionArgs,
-        /// File to apply from
-        #[clap(short, long)]
-        input: Option<PathBuf>,
-    },
-}
-
-impl ChannelFilterArgs {
-    fn any_channels(&self) -> bool {
-        self.text
-            || self.voice
-            || self.category
-            || self.news
-            || self.forum
-            || self.stage
-            || self.all
-    }
-}
-
 #[tokio::main]
 async fn main() {
     let is_tty = atty::is(Stream::Stderr);
@@ -286,62 +197,45 @@ async fn main() {
 }
 
 async fn run(is_tty: bool) -> Result<()> {
-    let args = Args::parse();
+    let work: Work = Args::parse().into();
 
-    let (token, guild_id) = match args {
-        // 接続不要なサブコマンドの処理
-        Args {
-            subcommand: Some(Commands::Completion { shell }),
-            ..
-        } => {
+    let (discord, filter, io, apply) = match work {
+        Work::Completion(shell) => {
             shell_completion(shell);
             return Ok(());
         }
-
-        // 接続が必要なサブコマンドの処理
-        Args {
-            subcommand: None,
-            ref discord,
-            ..
-        }
-        | Args {
-            subcommand:
-                Some(Commands::Export { ref discord, .. } | Commands::Apply { ref discord, .. }),
-            ..
-        } => {
-            let token = discord
-                .token
-                .clone()
-                .unwrap_or(env::var("DISCORD_TOKEN").unwrap_or_default());
-            if token.is_empty() {
-                return Err(Error::MissingArgument("DISCORD_TOKEN".into()));
-            }
-
-            // 設定したいGuild ID
-            let guild_id = GuildId::new(discord.guild_id.unwrap_or({
-                let Ok(id) = env::var("GUILD_ID") else {
-                    return Err(Error::MissingArgument("GUILD_ID".into()));
-                };
-                let Ok(id) = id.parse() else {
-                    return Err(Error::ParseArgument("GUILD_ID".into()));
-                };
-                id
-            }));
-            (token, guild_id)
-        }
+        Work::Edit {
+            discord,
+            filter,
+            io,
+            apply,
+        } => (discord, filter, io, apply),
     };
 
-    let filter = match args.subcommand {
-        // バッチモードの際は全チャンネルを対象にする
-        Some(Commands::Export { .. } | Commands::Apply { .. }) => ChannelFilterArgs {
-            all: true,
-            ..Default::default()
-        },
-        _ => args.filter,
-    };
+    let (http, guild_id) = {
+        // 設定したいGuild ID
+        let guild_id = GuildId::new(discord.guild_id.unwrap_or({
+            let Ok(id) = env::var("GUILD_ID") else {
+                return Err(Error::MissingArgument("GUILD_ID".into()));
+            };
+            let Ok(id) = id.parse() else {
+                return Err(Error::ParseArgument("GUILD_ID".into()));
+            };
+            id
+        }));
 
-    // クライアントを初期化
-    let http = Arc::new(Http::new(&token));
+        let token = discord
+            .token
+            .clone()
+            .unwrap_or(env::var("DISCORD_TOKEN").unwrap_or_default());
+        if token.is_empty() {
+            return Err(Error::MissingArgument("DISCORD_TOKEN".into()));
+        }
+
+        // 接続
+        let http = Arc::new(Http::new(&token));
+        (http, guild_id)
+    };
 
     // 指定したGuildのチャンネル一覧を取得
     {
@@ -363,7 +257,7 @@ async fn run(is_tty: bool) -> Result<()> {
             }
         }
 
-        if !filter.any_channels() {
+        if filter.none() {
             HashMap::new()
         } else {
             guild_id.channels(&http).await?
@@ -394,24 +288,16 @@ async fn run(is_tty: bool) -> Result<()> {
                 } else {
                     channel.position
                 };
-                let item = Some(ChannelItem {
-                    http: http.clone(),
-                    channel,
-                    channel_id,
-                    parent_name,
-                    category_position,
-                });
-                if filter.all {
-                    return item;
-                }
-                match kind {
-                    ChannelType::Text if filter.text => item,
-                    ChannelType::Voice if filter.voice => item,
-                    ChannelType::Category if filter.category => item,
-                    ChannelType::News if filter.news => item,
-                    ChannelType::Forum if filter.forum => item,
-                    ChannelType::Stage if filter.stage => item,
-                    _ => None,
+                if (&filter) & kind {
+                    Some(ChannelItem {
+                        http: http.clone(),
+                        channel,
+                        channel_id,
+                        parent_name,
+                        category_position,
+                    })
+                } else {
+                    None
                 }
             })
             .collect();
@@ -425,25 +311,26 @@ async fn run(is_tty: bool) -> Result<()> {
 
     // チャンネル名の一括編集
     let mut editor = Editor::new(items.into_iter())?;
-    if let Some(Commands::Export { output, .. }) = args.subcommand {
-        match output {
-            Some(file) => {
-                let mut output = BufWriter::new(File::create(file)?);
-                writeln!(output, "{}", editor)?;
-            }
-            None => {
-                let mut output = BufWriter::new(stdout());
-                writeln!(output, "{}", editor)?;
-            }
-        }
-        return Ok(());
-    }
+
     let diffs: Vec<_> = {
-        match args.subcommand {
-            None => {
+        match io {
+            IOMode::Output(output) => {
+                match output {
+                    Some(file) => {
+                        let mut output = BufWriter::new(File::create(file)?);
+                        writeln!(output, "{}", editor)?;
+                    }
+                    None => {
+                        let mut output = BufWriter::new(stdout());
+                        writeln!(output, "{}", editor)?;
+                    }
+                }
+                return Ok(());
+            }
+            IOMode::Editor => {
                 editor.edit()?;
             }
-            Some(Commands::Apply { input, .. }) => {
+            IOMode::Input(input) => {
                 let text = {
                     let mut text = String::new();
                     match input {
@@ -458,92 +345,95 @@ async fn run(is_tty: bool) -> Result<()> {
                 };
                 editor.set_text(text)?;
             }
-            _ => (),
         }
         editor.try_into()?
     };
-    if diffs.is_empty() {
-        eprintln!("No changes to apply");
-        return Ok(());
-    }
 
-    // OldとNewの表示文字列の幅を揃えるための計算
-    let old_width = {
-        let max_strwidth = diffs
-            .iter()
-            .map(|diff| UnicodeWidthStr::width(diff.old.as_str()))
-            .max()
-            .unwrap_or(0);
-        max_strwidth
-    };
-    let new_width = {
-        let max_strwidth = diffs
-            .iter()
-            .map(|diff| UnicodeWidthStr::width(diff.new.as_str()))
-            .max()
-            .unwrap_or(0);
-        max_strwidth
-    };
-
-    // 変更予定表の表示
-    for diff in &diffs {
-        let mut old = console::style(pad_str(
-            &diff.old,
-            old_width,
-            console::Alignment::Left,
-            None,
-        ));
-        let mut new = console::style(pad_str(
-            &diff.new,
-            new_width,
-            console::Alignment::Left,
-            None,
-        ));
-        let mut id = console::style(format!("({})", diff.item));
-        let split = " -> ".to_string();
-        if is_tty {
-            old = old.green();
-            new = new.green();
-            id = id.dim().italic();
-        }
-        eprintln!("{old}{split}{new}  {id}");
-    }
-
-    // 変更を適用するか確認
-    if !Confirm::new()
-        .with_prompt("Do you want to apply these changes?")
-        .default(false)
-        .interact()?
-    {
-        return Ok(());
-    }
-
-    // 変更状況の表示と適用
-    for diff in diffs {
-        let mut prompt = console::style("Applying:");
-        let mut old = console::style(pad_str(
-            &diff.old,
-            old_width,
-            console::Alignment::Left,
-            None,
-        ));
-        let mut new = console::style(pad_str(
-            &diff.new,
-            new_width,
-            console::Alignment::Left,
-            None,
-        ));
-        let mut id = console::style(format!("({})", diff.item));
-        let split = " -> ".to_string();
-        if is_tty {
-            prompt = prompt.blue().bold();
-            old = old.green();
-            new = new.green();
-            id = id.dim().italic();
+    if let Some(ApplyArgs { yes, .. }) = apply {
+        if diffs.is_empty() {
+            eprintln!("No changes to apply");
+            return Ok(());
         }
 
-        eprintln!("{prompt} {old}{split}{new}  {id}");
-        diff.apply().await?;
+        // OldとNewの表示文字列の幅を揃えるための計算
+        let old_width = {
+            let max_strwidth = diffs
+                .iter()
+                .map(|diff| UnicodeWidthStr::width(diff.old.as_str()))
+                .max()
+                .unwrap_or(0);
+            max_strwidth
+        };
+        let new_width = {
+            let max_strwidth = diffs
+                .iter()
+                .map(|diff| UnicodeWidthStr::width(diff.new.as_str()))
+                .max()
+                .unwrap_or(0);
+            max_strwidth
+        };
+
+        if !yes {
+            // 変更予定表の表示
+            for diff in &diffs {
+                let mut old = console::style(pad_str(
+                    &diff.old,
+                    old_width,
+                    console::Alignment::Left,
+                    None,
+                ));
+                let mut new = console::style(pad_str(
+                    &diff.new,
+                    new_width,
+                    console::Alignment::Left,
+                    None,
+                ));
+                let mut id = console::style(format!("({})", diff.item));
+                let split = " -> ".to_string();
+                if is_tty {
+                    old = old.green();
+                    new = new.green();
+                    id = id.dim().italic();
+                }
+                eprintln!("{old}{split}{new}  {id}");
+            }
+
+            if !Confirm::new()
+                .with_prompt("Do you want to apply these changes?")
+                .default(false)
+                .interact()?
+            {
+                return Ok(());
+            }
+        }
+
+        // 変更状況の表示と適用
+        for diff in diffs {
+            let mut prompt = console::style("Applying:");
+            let mut old = console::style(pad_str(
+                &diff.old,
+                old_width,
+                console::Alignment::Left,
+                None,
+            ));
+            let mut new = console::style(pad_str(
+                &diff.new,
+                new_width,
+                console::Alignment::Left,
+                None,
+            ));
+            let mut id = console::style(format!("({})", diff.item));
+            let split = " -> ".to_string();
+            if is_tty {
+                prompt = prompt.blue().bold();
+                old = old.green();
+                new = new.green();
+                id = id.dim().italic();
+            }
+
+            eprintln!("{prompt} {old}{split}{new}  {id}");
+            diff.apply().await?;
+        }
     }
 
     Ok(())
