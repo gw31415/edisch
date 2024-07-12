@@ -19,7 +19,8 @@ use std::{
     collections::HashMap,
     env,
     fmt::Display,
-    io::{self, stdout, BufWriter, Write},
+    fs::File,
+    io::{self, stdin, stdout, BufReader, BufWriter, Read, Write},
     path::PathBuf,
     sync::Arc,
 };
@@ -226,12 +227,12 @@ enum Commands {
         #[clap(short, long)]
         output: Option<PathBuf>,
     },
-    // /// Apply channel names from a file or stdin
-    // Apply {
-    //     /// File to apply from
-    //     #[clap(short, long)]
-    //     input: Option<PathBuf>,
-    // },
+    /// Apply channel names from a file or stdin
+    Apply {
+        /// File to apply from
+        #[clap(short, long)]
+        input: Option<PathBuf>,
+    },
 }
 
 impl ChannelFilter {
@@ -279,7 +280,7 @@ async fn run(is_tty: bool) -> Result<()> {
     }
 
     let filter = match args.subcommand {
-        Some(Commands::Export { .. }) => ChannelFilter {
+        Some(Commands::Export { .. } | Commands::Apply { .. }) => ChannelFilter {
             all: true,
             ..Default::default()
         },
@@ -391,18 +392,40 @@ async fn run(is_tty: bool) -> Result<()> {
     // チャンネル名の一括編集
     let mut editor = Editor::new(items.into_iter())?;
     if let Some(Commands::Export { output, .. }) = args.subcommand {
-        let mut output = output.map_or_else(
-            || Box::new(BufWriter::new(stdout())) as Box<dyn io::Write>,
-            |p| {
-                let file = std::fs::File::create(p).unwrap();
-                Box::new(BufWriter::new(file)) as Box<dyn io::Write>
-            },
-        );
-        writeln!(output, "{}", editor)?;
+        match output {
+            Some(file) => {
+                let mut output = BufWriter::new(File::create(file)?);
+                writeln!(output, "{}", editor)?;
+            }
+            None => {
+                let mut output = BufWriter::new(stdout());
+                writeln!(output, "{}", editor)?;
+            }
+        }
         return Ok(());
     }
     let diffs: Vec<_> = {
-        editor.edit()?;
+        match args.subcommand {
+            None => {
+                editor.edit()?;
+            }
+            Some(Commands::Apply { input }) => {
+                let text = {
+                    let mut text = String::new();
+                    match input {
+                        Some(ref p) => {
+                            BufReader::new(File::open(p)?).read_to_string(&mut text)?;
+                        }
+                        None => {
+                            BufReader::new(stdin()).read_to_string(&mut text)?;
+                        }
+                    }
+                    text
+                };
+                editor.set_text(text)?;
+            }
+            _ => (),
+        }
         editor.try_into()?
     };
     if diffs.is_empty() {

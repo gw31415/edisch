@@ -104,8 +104,7 @@ impl<T: TextEditableItem> Editor<T> {
             lines,
         })
     }
-    pub fn edit(&mut self) -> Result<()> {
-        let mut text = edit(self)?;
+    pub fn set_text(&mut self, mut text: String) -> Result<()> {
         // 最後の文字が改行の場合削除
         if text.ends_with('\n') {
             text.pop();
@@ -115,6 +114,10 @@ impl<T: TextEditableItem> Editor<T> {
         }
         self.lines = text.lines().map(str::to_string).collect();
         Ok(())
+    }
+    pub fn edit(&mut self) -> Result<()> {
+        let text = edit(self)?;
+        self.set_text(text)
     }
 }
 
