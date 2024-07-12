@@ -22,11 +22,6 @@ pub struct Args {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
-    /// Generate shell completion
-    Completion {
-        /// Shell to generate completion for
-        shell: Shell,
-    },
     /// Export all channel names to a file or stdout
     Export {
         /// Discord connection arguments
@@ -47,6 +42,11 @@ enum Commands {
         /// Apply arguments
         #[clap(flatten)]
         apply: ApplyArgs,
+    },
+    /// Generate shell completion
+    Completion {
+        /// Shell to generate completion for
+        shell: Shell,
     },
 }
 
