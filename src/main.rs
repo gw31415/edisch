@@ -178,19 +178,27 @@ impl TextEditableItem for ChannelItem {
 struct Args {
     #[clap(subcommand)]
     subcommand: Option<Commands>,
-    /// Bot token. If not provided, it will be read from the $DISCORD_TOKEN environment variable
-    #[clap(short, long, global = true)]
-    token: Option<String>,
-    /// Guild ID. If not provided, it will be read from the $GUILD_ID environment variable
-    #[clap(short, long, global = true)]
-    guild_id: Option<u64>,
+    /// Discord connection options
+    #[clap(flatten)]
+    discord: DiscordConnectionArgs,
     /// Filter text channels
     #[clap(flatten)]
-    filter: ChannelFilter,
+    filter: ChannelFilterArgs,
+}
+
+/// Token and Guild ID for Discord connection
+#[derive(clap::Args, Debug)]
+struct DiscordConnectionArgs {
+    /// Bot token. If not provided, it will be read from the $DISCORD_TOKEN environment variable
+    #[clap(short, long)]
+    token: Option<String>,
+    /// Guild ID. If not provided, it will be read from the $GUILD_ID environment variable
+    #[clap(short, long)]
+    guild_id: Option<u64>,
 }
 
 #[derive(clap::Args, Debug, Clone, Default)]
-struct ChannelFilter {
+struct ChannelFilterArgs {
     /// Edit Text Channels
     #[clap(long)]
     text: bool,
@@ -221,21 +229,27 @@ enum Commands {
         /// Shell to generate completion for
         shell: Shell,
     },
-    /// Export channel names to a file or stdout
+    /// Export all channel names to a file or stdout
     Export {
+        /// Discord connection options
+        #[clap(flatten)]
+        discord: DiscordConnectionArgs,
         /// File to export to
         #[clap(short, long)]
         output: Option<PathBuf>,
     },
-    /// Apply channel names from a file or stdin
+    /// Apply all channel names from a file or stdin
     Apply {
+        /// Discord connection options
+        #[clap(flatten)]
+        discord: DiscordConnectionArgs,
         /// File to apply from
         #[clap(short, long)]
         input: Option<PathBuf>,
     },
 }
 
-impl ChannelFilter {
+impl ChannelFilterArgs {
     fn any_channels(&self) -> bool {
         self.text
             || self.voice
@@ -273,38 +287,58 @@ async fn main() {
 
 async fn run(is_tty: bool) -> Result<()> {
     let args = Args::parse();
-    // Shell completion
-    if let Some(Commands::Completion { shell }) = args.subcommand {
-        shell_completion(shell);
-        return Ok(());
-    }
+
+    let (token, guild_id) = match args {
+        // 接続不要なサブコマンドの処理
+        Args {
+            subcommand: Some(Commands::Completion { shell }),
+            ..
+        } => {
+            shell_completion(shell);
+            return Ok(());
+        }
+
+        // 接続が必要なサブコマンドの処理
+        Args {
+            subcommand: None,
+            ref discord,
+            ..
+        }
+        | Args {
+            subcommand:
+                Some(Commands::Export { ref discord, .. } | Commands::Apply { ref discord, .. }),
+            ..
+        } => {
+            let token = discord
+                .token
+                .clone()
+                .unwrap_or(env::var("DISCORD_TOKEN").unwrap_or_default());
+            if token.is_empty() {
+                return Err(Error::MissingArgument("DISCORD_TOKEN".into()));
+            }
+
+            // 設定したいGuild ID
+            let guild_id = GuildId::new(discord.guild_id.unwrap_or({
+                let Ok(id) = env::var("GUILD_ID") else {
+                    return Err(Error::MissingArgument("GUILD_ID".into()));
+                };
+                let Ok(id) = id.parse() else {
+                    return Err(Error::ParseArgument("GUILD_ID".into()));
+                };
+                id
+            }));
+            (token, guild_id)
+        }
+    };
 
     let filter = match args.subcommand {
-        Some(Commands::Export { .. } | Commands::Apply { .. }) => ChannelFilter {
+        // バッチモードの際は全チャンネルを対象にする
+        Some(Commands::Export { .. } | Commands::Apply { .. }) => ChannelFilterArgs {
             all: true,
             ..Default::default()
         },
         _ => args.filter,
     };
-
-    let token = args
-        .token
-        .clone()
-        .unwrap_or(env::var("DISCORD_TOKEN").unwrap_or_default());
-    if token.is_empty() {
-        return Err(Error::MissingArgument("DISCORD_TOKEN".into()));
-    }
-
-    // 設定したいGuild ID
-    let guild_id = GuildId::new(args.guild_id.unwrap_or({
-        let Ok(id) = env::var("GUILD_ID") else {
-            return Err(Error::MissingArgument("GUILD_ID".into()));
-        };
-        let Ok(id) = id.parse() else {
-            return Err(Error::ParseArgument("GUILD_ID".into()));
-        };
-        id
-    }));
 
     // クライアントを初期化
     let http = Arc::new(Http::new(&token));
@@ -409,7 +443,7 @@ async fn run(is_tty: bool) -> Result<()> {
             None => {
                 editor.edit()?;
             }
-            Some(Commands::Apply { input }) => {
+            Some(Commands::Apply { input, .. }) => {
                 let text = {
                     let mut text = String::new();
                     match input {
